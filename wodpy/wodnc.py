@@ -37,6 +37,7 @@ class Ragged():
         filename: name of netcdf file containing wod profiles
         '''
         self.rootgrp = Dataset(filename, "r", format="NETCDF4")
+        self.rootgrp.set_auto_mask(False)
 
     def ncasts(self):
         return self.rootgrp.dimensions['casts'].size
@@ -80,25 +81,42 @@ class ncProfile():
         decode a numpy masked array of bytes into a regular string
         '''
 
-        return ''.join([a.decode('UTF-8') for i, a in enumerate(bytearray) if not bytearray.mask[i]])
+        #return ''.join([a.decode('UTF-8') for i, a in enumerate(bytearray) if not bytearray.mask[i]])
+        return ''.join([a.decode('UTF-8') for i, a in enumerate(bytearray)])
 
     def determine_offset(self, var):
         '''
         determine the offset in the list of measurements for <var> where this profile's data begins
         '''
-
+        #print('in determine offset')
+        #print(var)
+        #print(self.i)
         previous = self.r.variables()[var][0:self.i]
-        if not previous.mask is numpy.ma.nomask:
-            return sum([int(a) for i, a in enumerate(previous) if not previous.mask[i]])
-        else:
-            return sum([int(a) for a in previous])
-
+        
+        
+        #print(previous)
+        #previous_np = previous.filled(fill_value=0)
+        #print(type(previous_np))
+        #print('testing!')
+        #print('test offset ', numpy.sum(previous_np))
+        #print(previous.mask is numpy.ma.nomask)
+        
+        #=======================================#
+        # Prvious version of WODpy
+        ##if not previous.mask is numpy.ma.nomask:
+        ##    return sum([int(a) for i, a in enumerate(previous) if not previous.mask[i]])
+        ##else:
+        ##    return sum([int(a) for a in previous])
+        #========================================#
+        return numpy.sum(previous)
     def locate_in_ragged(self, v):
         '''
         returns (offset, nentries) for variable v to extract it for this profile from the raggedarray.
         '''
         offset = self.determine_offset(v+'_row_size')
-        nentries = self.metadata(v+'_row_size')
+        #print('offset: ', offset)
+        nentries = int(self.metadata(v+'_row_size'))
+        #print(nentries)
         return offset, nentries
 
     def is_metadata(self, metadata_key):
@@ -126,8 +144,14 @@ class ncProfile():
         '''
         returns true if data_key looks like per level data
         '''
-
-        if data_key + '_obs' in self.r.dimensions():
+        
+        if 'flag' in data_key:
+            data_key_root = data_key.split('_')[0]
+        else:
+            data_key_root = data_key
+        
+        
+        if data_key_root + '_obs' in self.r.dimensions():
             # per level data should have a *_obs dimension 
             return True
         else:
@@ -169,14 +193,35 @@ class ncProfile():
         data = numpy.ma.array(numpy.zeros(self.n_levels()), mask=True)
 
         if self.is_level_data(level_key):
-            offset, nentries = self.locate_in_ragged(level_key)
+            if 'flag' in level_key:
+                level_key_root = level_key.split('_')[0]
+            else:
+                level_key_root = level_key
+            
+            
+            offset, nentries = self.locate_in_ragged(level_key_root)
             data = self.r.variables()[level_key][offset:offset + nentries]
         else:
             logging.warning('Level variable ' + level_key + ' not found.')
         
         return data
 
+    def get_variable_attr(self,var,attr):
+        
+        if attr in self.r.variables()[var].ncattrs():
+            return self.r.variables()[var].getncattr(attr) 
+        else:
+             logging.warning('Variable Attribute ' + attr + ' not found for variable ', var)
+        
     
+    def show_variable_attr(self,var):
+        '''
+        returns the list of all valid variable attributes for variable 
+        '''
+        return [x for x in self.r.variables()[var].ncattrs()]
+
+    
+        
     ## helpers to match behavior of ASCII parser #############################################
 
     def latitude(self):
@@ -288,6 +333,8 @@ class ncProfile():
         # typical values of flagtype: orig | WOD
         # redundant with level_unpack, here for symmetry with ascii implementation
 
+        
+        
         return self.level_unpack(v+'_'+flagtype+'flag')
 
     def var_profile_qc(self, v):
