@@ -259,11 +259,19 @@ class ncProfile():
 
     def datetime(self):
         """ Returns the date and time as a datetime object. """
+        nan_value = float('nan') 
 
+        
         time  = self.time()
-        if time is None or time < 0 or time >= 24:
+        
+        #if time != time:
+        #    print('found it!')
+        #print(type(time))
+        
+        if time is None or time != time or time < 0 or time >= 24:
+            #print('Missing GMT time')
             time = 0
-
+        
         try:
             d = datetime(self.year(), self.month(), self.day()) + timedelta(hours=time)
             return d
